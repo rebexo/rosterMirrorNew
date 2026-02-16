@@ -7,10 +7,12 @@ import org.roster.backend.domain.*; // normale Entities
 //import org.roster.backend.solver.domain.*; // Solver-Entities
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 
 import java.util.*; // Für Set
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Application service responsible for orchestrating the automated schedule generation process.
@@ -37,6 +39,7 @@ public class SolverService implements iSolverService {
     private final SolverPort solverPort;      // nutzt Adapter
     private final SchemaPort schemaPort;
     private final ProposalPort proposalPort;  // speichert Ergebnis
+    private final TransactionTemplate transactionTemplate; // um Transaktionen im Hintergrund starten zu können
 
     /**
      * Solves a schedule for a given schema and returns the generated schedule proposal.
@@ -51,15 +54,39 @@ public class SolverService implements iSolverService {
      */
     @Transactional
     @Override
-    public ScheduleProposal solve(UUID schemaId) {
+    public UUID solve(UUID schemaId) {
+        // 1. Hintergrund-Job starten (Nicht blockierend!)
+        CompletableFuture.runAsync(() -> {
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    performSolveAndSave(schemaId); //Hilfsmethode - ehem. solve()
+                });
+            } catch (Exception e) {
+                System.err.println("Fehler im Hintergrund-Solver: " + e.getMessage());
+                // später evtl. einen Status in der DB auf "FAILED" setzen
+            }
+        });
+
+        // 2. Sofort zurückkehren
+        return schemaId;
+    }
+
+
+    protected void performSolveAndSave(UUID schemaId) {
         // Schema laden
         ScheduleSchema schema = schemaPort.findSchemaById(schemaId)
                 .orElseThrow(() -> new IllegalArgumentException("Schema not found"));
 
-        // Adapter aufrufen -> Adapter liefert fertig gebautes, aber noch nicht gespeichertes Proposal
+        // Adapter aufrufen (blockiert Hintergrund-Thread, nicht mehr den User!)
         ScheduleProposal proposal = solverPort.solve(schema);
 
-        // Ergebnis speichern
-        return proposalPort.save(proposal);
+        // nur speichern, wenn wirklich ein Proposal zurückkam (Timefold-Modus)
+        if (proposal != null) {
+            proposalPort.save(proposal);
+            System.out.println("Dienstplan lokal berechnet und gespeichert!");
+        } else {
+            System.out.println("Nachricht gesendet. Worker übernimmt die Speicherung später.");
+        }
     }
+
 }

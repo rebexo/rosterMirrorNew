@@ -19,5 +19,5 @@ import java.util.UUID;
  */
 public interface iSolverService {
     @Transactional
-    ScheduleProposal solve(UUID schemaId);
+    UUID solve(UUID schemaId);
 }

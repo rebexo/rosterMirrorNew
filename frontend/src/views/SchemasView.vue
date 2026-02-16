@@ -1,95 +1,100 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useSchemaStore } from '@/stores/schema';
-import { RouterLink, useRouter } from 'vue-router';
-import type { Ref } from 'vue';
-import { formatDateDE } from '@/utils/formatters';
-import axios from 'axios';
+import { onMounted, ref } from 'vue'
+import { useSchemaStore } from '@/stores/schema'
+import { RouterLink, useRouter } from 'vue-router'
+import type { Ref } from 'vue'
+import { formatDateDE } from '@/utils/formatters'
+import axios from 'axios'
 
-const schemaStore = useSchemaStore();
-const router = useRouter();
+const schemaStore = useSchemaStore()
+const router = useRouter()
 
 // Lokaler State
-const localExpectedEntries: Ref<Record<string, number | null>> = ref({});
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+const localExpectedEntries: Ref<Record<string, number | null>> = ref({})
+const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
 
 onMounted(async () => {
-  await schemaStore.fetchSchemas();
-  schemaStore.schemas.forEach(schema => {
+  await schemaStore.fetchSchemas()
+  schemaStore.schemas.forEach((schema) => {
     if (schema.id) {
-      localExpectedEntries.value[schema.id] = schema.expectedEntries ?? null;
+      localExpectedEntries.value[schema.id] = schema.expectedEntries ?? null
     }
-  });
-});
+  })
+})
 
 function handleUpdate(schemaId: string) {
-  const count = localExpectedEntries.value[schemaId];
+  const count = localExpectedEntries.value[schemaId]
   if (count !== null && count >= 0) {
-    schemaStore.updateExpectedEntries(schemaId, count);
+    schemaStore.updateExpectedEntries(schemaId, count)
   }
 }
 
 function getFullLink(linkId: string): string {
-  return `${window.location.origin}/submit/${linkId}`;
+  return `${window.location.origin}/submit/${linkId}`
 }
 
 // Hilfsfunktion für das Markieren des Links (löst das TypeScript-Problem)
 function selectText(event: Event) {
-  const target = event.target as HTMLInputElement;
-  target.select();
+  const target = event.target as HTMLInputElement
+  target.select()
 }
 
 function goToAvailabilities(schemaId: string) {
-  router.push({ name: 'schema-availabilities', params: { schemaId: schemaId } });
+  router.push({ name: 'schema-availabilities', params: { schemaId: schemaId } })
 }
 
 async function generateVorschlag(schemaId: string) {
   try {
-    const response = await axios.post(`${baseURL}/schemas/${schemaId}/generate_proposal`, {}, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
-    });
-    const newProposalId = response.data.id;
-    alert("Dienstplanvorschlag generiert!");
-    router.push({ name: 'proposal-details', params: { proposalId: newProposalId } });
+    await axios.post(
+      `${baseURL}/schemas/${schemaId}/generate_proposal`,
+      {},
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` },
+      },
+    )
+    //const newProposalId = response.data.id;
+    alert(
+      "Dienstplanvorschlag wird generiert! \n\nDas dauert jetzt einen Moment. Lade die Seite in ca. 1 Minute neu und klicke auf 'Plan ➔'.",
+    )
+    //router.push({ name: 'proposal-details', params: { proposalId: newProposalId } })
   } catch (err) {
-    console.error("Fehler beim Generieren des Vorschlags:", err);
-    alert("Fehler: " + ((err as any).response?.data || (err as any).message));
+    console.error('Fehler beim Generieren des Vorschlags:', err)
+    alert('Fehler: ' + ((err as any).response?.data || (err as any).message))
   }
 }
 
 async function viewLatestProposalForSchema(schemaId: string) {
   try {
-    const response = await axios.get<string>(`${baseURL}/proposals/latest/bySchema/${schemaId}/id`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
-    });
-    const latestProposalId = response.data;
+    const response = await axios.get<string>(
+      `${baseURL}/proposals/latest/bySchema/${schemaId}/id`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` },
+      },
+    )
+    const latestProposalId = response.data
     if (latestProposalId) {
-      router.push({ name: 'proposal-details', params: { proposalId: latestProposalId } });
+      router.push({ name: 'proposal-details', params: { proposalId: latestProposalId } })
     } else {
-      alert("Für dieses Dienstplanschema wurde noch kein Vorschlag generiert.");
+      alert('Für dieses Dienstplanschema wurde noch kein Vorschlag generiert.')
     }
   } catch (err) {
-    console.error("Fehler beim Abrufen:", err);
-    alert("Fehler: " + ((err as any).response?.data?.message || (err as any).message));
+    console.error('Fehler beim Abrufen:', err)
+    alert('Fehler: ' + ((err as any).response?.data?.message || (err as any).message))
   }
 }
 </script>
 
 <template>
   <div class="schemas-container">
-
     <div class="page-header">
       <h1>Deine Dienstpläne</h1>
-      <RouterLink to="/schemas/new" class="btn-create">
-        Neuen Dienstplan erstellen
-      </RouterLink>
+      <RouterLink to="/schemas/new" class="btn-create"> Neuen Dienstplan erstellen </RouterLink>
     </div>
 
     <div v-if="schemaStore.isLoading" class="loading-indicator">Lade Dienstpläne...</div>
 
     <div v-else-if="schemaStore.schemas.length > 0" class="schema-grid">
       <article v-for="schema in schemaStore.schemas" :key="schema.id" class="schema-card">
-
         <div class="card-header">
           <RouterLink :to="`/schemas/${schema.id}`" class="schema-title-link">
             <h2>{{ schema.name }}</h2>
@@ -117,7 +122,9 @@ async function viewLatestProposalForSchema(schemaId: string) {
                   @blur="handleUpdate(schema.id!)"
                   @keyup.enter="handleUpdate(schema.id!)"
                 />
-                <button @click="handleUpdate(schema.id!)" class="btn-save-mini" title="Speichern">Speichern</button>
+                <button @click="handleUpdate(schema.id!)" class="btn-save-mini" title="Speichern">
+                  Speichern
+                </button>
               </div>
             </div>
           </div>
@@ -134,14 +141,23 @@ async function viewLatestProposalForSchema(schemaId: string) {
         </div>
 
         <div class="card-footer">
-          <button @click="goToAvailabilities(schema.id!)" class="btn-action secondary">Verfügbarkeiten</button>
+          <button @click="goToAvailabilities(schema.id!)" class="btn-action secondary">
+            Verfügbarkeiten
+          </button>
           <div class="action-divider"></div>
           <div class="primary-actions">
-            <button @click="generateVorschlag(schema.id!)" class="btn-action primary">Generieren</button>
-            <button @click="viewLatestProposalForSchema(schema.id!)" class="btn-action outline" title="Letzten Plan anschauen">Plan ➔</button>
+            <button @click="generateVorschlag(schema.id!)" class="btn-action primary">
+              Generieren
+            </button>
+            <button
+              @click="viewLatestProposalForSchema(schema.id!)"
+              class="btn-action outline"
+              title="Letzten Plan anschauen"
+            >
+              Plan ➔
+            </button>
           </div>
         </div>
-
       </article>
     </div>
 
@@ -203,13 +219,15 @@ async function viewLatestProposalForSchema(schemaId: string) {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .schema-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 8px 15px rgba(0,0,0,0.08);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08);
   border-color: #d0d0d0;
 }
 
@@ -400,7 +418,7 @@ async function viewLatestProposalForSchema(schemaId: string) {
 .btn-action.primary {
   background-color: hsla(160, 100%, 37%, 1);
   color: white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .btn-action.primary:hover {
@@ -419,7 +437,8 @@ async function viewLatestProposalForSchema(schemaId: string) {
   background-color: #f9f9f9;
 }
 
-.loading-indicator, .no-data-message {
+.loading-indicator,
+.no-data-message {
   text-align: center;
   padding: 4rem;
   color: #777;

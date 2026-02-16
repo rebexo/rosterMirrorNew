@@ -14,6 +14,7 @@ import org.roster.backend.domain.ScheduleSchema;
 import org.roster.backend.domain.WeeklyTemplate;
 import org.roster.backend.domain.enums.ProposalStatus;
 import org.roster.backend.solver.domain.*;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
@@ -42,6 +43,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@Profile("worker")
 public class TimefoldSolverAdapter implements SolverPort {
 
     private final SolverManager<RosterSolution, UUID> solverManager;

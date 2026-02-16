@@ -71,11 +71,11 @@ public class SchemaController {
     @PostMapping("/{id}/generate_proposal")
     public ResponseEntity<?> generateProposal(@PathVariable UUID id) {
         try {
-            ScheduleProposal proposal = solverService.solve(id);
-            // Gib die Lösung zurück (oder nur eine Bestätigung)
-            return ResponseEntity.ok(proposal); // Evtl. nur Score zurückgeben.
+            UUID jobId = solverService.solve(id);
+            // 202 Accepted zurückgeben
+            return ResponseEntity.accepted().body("Job gestartet für Schema: " + jobId);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Fehler bei der Planerstellung: " + e.getMessage());
+            return ResponseEntity.internalServerError().body("Fehler beim Starten: " + e.getMessage());
         }
     }
 

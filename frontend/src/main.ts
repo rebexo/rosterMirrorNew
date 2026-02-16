@@ -10,9 +10,9 @@ import App from './App.vue'
 import router from './router'
 
 // Im Entwicklungsmodus den Auth-Token aus dem lokalen Speicher entfernen
-if (import.meta.env.DEV) {
-  localStorage.removeItem('authToken');
-}
+// if (import.meta.env.DEV) {
+//   localStorage.removeItem('authToken');
+// }
 
 const app = createApp(App)
 

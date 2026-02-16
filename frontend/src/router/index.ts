@@ -77,11 +77,16 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
 
+  // wenn Token im Speicher liegt, aber User noch nicht geladen wurde:
+  if (authStore.token && !authStore.user) {
+    authStore.initialize()
+  }
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    // wenn Seite einen Login erfordert und der User nicht eingeloggt ist -> zum Login umleiten
+    // login nötig aber user nicht eingeloggt -> zum login
     next({ name: 'login' })
   } else {
-    // Wechsel zur neuen Seite erlauben
+    // sonst: geh mit gott
     next()
   }
 })
