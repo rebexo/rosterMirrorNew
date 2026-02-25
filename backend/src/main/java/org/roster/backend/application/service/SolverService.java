@@ -55,19 +55,8 @@ public class SolverService implements iSolverService {
     @Transactional
     @Override
     public UUID solve(UUID schemaId) {
-        // 1. Hintergrund-Job starten (Nicht blockierend!)
-        CompletableFuture.runAsync(() -> {
-            try {
-                transactionTemplate.executeWithoutResult(status -> {
-                    performSolveAndSave(schemaId); //Hilfsmethode - ehem. solve()
-                });
-            } catch (Exception e) {
-                System.err.println("Fehler im Hintergrund-Solver: " + e.getMessage());
-                // später evtl. einen Status in der DB auf "FAILED" setzen
-            }
-        });
-
-        // 2. Sofort zurückkehren
+        // async wird durch queue und worker erledigt, deswegen wieder sync aufruf
+        performSolveAndSave(schemaId);
         return schemaId;
     }
 
@@ -77,7 +66,7 @@ public class SolverService implements iSolverService {
         ScheduleSchema schema = schemaPort.findSchemaById(schemaId)
                 .orElseThrow(() -> new IllegalArgumentException("Schema not found"));
 
-        // Adapter aufrufen (blockiert Hintergrund-Thread, nicht mehr den User!)
+        // Adapter aufrufen (blockiert worker-thread, nicht user)
         ScheduleProposal proposal = solverPort.solve(schema);
 
         // nur speichern, wenn wirklich ein Proposal zurückkam (Timefold-Modus)

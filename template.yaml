@@ -14,6 +14,8 @@ Resources:
   # 1. baue SQS Queue
   RosterJobQueue:
     Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 910
 
   # 2. baue Lambdalith (backend)
   RosterWebFunction:
@@ -26,17 +28,18 @@ Resources:
         - arm64
       MemorySize: 3008 # erhöht wg. coldstart-timeout
       Timeout: 29
-        # SnapStart broemm broemm
+      # SnapStart broemm broemm
       AutoPublishAlias: live
       SnapStart:
-          ApplyOn: PublishedVersions
+        ApplyOn: PublishedVersions
       # fertige fat jar
       CodeUri: backend/target/backend-0.0.1-SNAPSHOT.jar
       Environment:
         Variables:
           # spring muss in web-mode
           SPRING_PROFILES_ACTIVE: web,dev
-          DB_PASSWORD: !Ref DatabasePassword
+          DB_PASSWORD: !Ref DatabasePassword # wird bei sam deploy mitgegeben
+          SOLVER_QUEUE_URL: !Ref RosterJobQueue # sqs url fuer adapter
       Policies:
         # lamdalith darf messages in queue schmeißen
         - SQSSendMessagePolicy:
@@ -48,6 +51,40 @@ Resources:
           Properties:
             Path: /{proxy+} # alle routen an spring weiterleiten
             Method: ANY
+
+  # Lambda FaaS Worker für solver
+  RosterWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      # gleiche code-basis
+      CodeUri: backend/target/backend-0.0.1-SNAPSHOT.jar
+      Handler: org.roster.backend.SqsWorkerHandler::handleRequest
+      Runtime: java21
+      Architectures:
+        - arm64
+      # Solver kriegt CPU/RAM und die max 15 min
+      MemorySize: 2048
+      Timeout: 900
+      AutoPublishAlias: live
+      SnapStart:
+        ApplyOn: PublishedVersions
+      Environment:
+        Variables:
+          # --- aktiviere WORKER Profil ---
+          SPRING_PROFILES_ACTIVE: worker,dev
+          DB_PASSWORD: !Ref DatabasePassword
+      Policies:
+        # Erlaubt das Lesen aus der Queue
+        - SQSPollerPolicy:
+            QueueName: !GetAtt RosterJobQueue.QueueName
+        - AWSLambdaVPCAccessExecutionRole
+      Events:
+        # Funktion wird NICHT über HTTP, sondern von Warteschlange aufgeweckt
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt RosterJobQueue.Arn
+            BatchSize: 1 # Immer nur einen Dienstplan auf einmal berechnen
 
 Outputs:
   # wenn AWS fertig -> fertige URL für das frontend ausspucken!

@@ -65,10 +65,10 @@ class RosterConstraintProviderTest {
         // Zuweisung OHNE Mitarbeiter (null)
         ShiftAssignment assignment = new ShiftAssignment(UUID.randomUUID(), shift, null);
 
-        // Die Regel 'penalizeUnassignedShifts' gibt 100 Soft-Punkte Strafe.
-        // Das entspricht einem Score von "0 Hard, -100 Soft".
+        // Die Regel 'penalizeUnassignedShifts' gibt 1000 Soft-Punkte Strafe.
+        // Das entspricht einem Score von "0 Hard, -1000 Soft".
         constraintVerifier.verifyThat()
                 .given(shift, assignment)
-                .scores(HardSoftScore.ofSoft(-100));
+                .scores(HardSoftScore.ofSoft(-1000));
     }
 }
