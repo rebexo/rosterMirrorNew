@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "roster-app-backend"
+resolve_s3 = true
+s3_prefix = "roster-app-backend"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+parameter_overrides = "DatabaseUrl=\"jdbc:postgresql://roster-db.dumdidum.eu-central-1.rds.amazonaws.com:5432/rosterdb\" DatabaseUsername=\"postgres\""
+
+[default.global.parameters]
+region = "eu-central-1"

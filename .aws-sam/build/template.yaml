@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'RosterApp - Backend Migration (Phase 5) Lambdalith + SQS Queue
+
+  '
+Parameters:
+  DatabaseUrl:
+    Type: String
+    Default: jdbc:postgresql://roster-db.crymoa6okv9n.eu-central-1.rds.amazonaws.com:5432/rosterdb
+  DatabaseUsername:
+    Type: String
+    Default: postgres
+  DatabasePassword:
+    Type: String
+    Description: Das Passwort die PostgreSQL RDS Datenbank
+    NoEcho: true
+Resources:
+  RosterJobQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 910
+  RosterWebFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: org.roster.backend.StreamLambdaHandler::handleRequest
+      Runtime: java21
+      Architectures:
+      - arm64
+      MemorySize: 1024
+      Timeout: 29
+      AutoPublishAlias: live
+      SnapStart:
+        ApplyOn: PublishedVersions
+      CodeUri: RosterWebFunction
+      Environment:
+        Variables:
+          SPRING_PROFILES_ACTIVE: web,dev
+          DB_URL:
+            Ref: DatabaseUrl
+          DB_USERNAME:
+            Ref: DatabaseUsername
+          DB_PASSWORD:
+            Ref: DatabasePassword
+          DB_DRIVER: org.postgresql.Driver
+          SOLVER_QUEUE_URL:
+            Ref: RosterJobQueue
+          SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: '0'
+          SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: '300000'
+          SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: '120000'
+      Policies:
+      - SQSSendMessagePolicy:
+          QueueName:
+            Fn::GetAtt:
+            - RosterJobQueue
+            - QueueName
+      Events:
+        RosterApi:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+    Metadata:
+      SamResourceId: RosterWebFunction
+  RosterWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: RosterWorkerFunction
+      Handler: org.roster.backend.SqsWorkerHandler::handleRequest
+      Runtime: java21
+      Architectures:
+      - arm64
+      MemorySize: 1769
+      Timeout: 900
+      AutoPublishAlias: live
+      SnapStart:
+        ApplyOn: PublishedVersions
+      Environment:
+        Variables:
+          SPRING_PROFILES_ACTIVE: worker,dev
+          DB_URL:
+            Ref: DatabaseUrl
+          DB_USERNAME:
+            Ref: DatabaseUsername
+          DB_PASSWORD:
+            Ref: DatabasePassword
+          DB_DRIVER: org.postgresql.Driver
+          SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: '0'
+          SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: '300000'
+          SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: '120000'
+      Policies:
+      - SQSPollerPolicy:
+          QueueName:
+            Fn::GetAtt:
+            - RosterJobQueue
+            - QueueName
+      - AWSLambdaVPCAccessExecutionRole
+      Events:
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - RosterJobQueue
+              - Arn
+            BatchSize: 1
+    Metadata:
+      SamResourceId: RosterWorkerFunction
+Outputs:
+  WebEndpoint:
+    Description: Trage diese URL in deine Vue.js .env Datei ein!
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod

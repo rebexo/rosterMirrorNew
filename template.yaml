@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  RosterApp - Backend Migration (Phase 5)
+  Lambdalith + SQS Queue
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    Default: "jdbc:postgresql://roster-db.xyzxyzxyz.eu-central-1.rds.amazonaws.com:5432/rosterdb"
+  DatabaseUsername:
+      Type: String
+      Default: "postgres"
+  DatabasePassword:
+    Type: String
+    Description: Das Passwort die PostgreSQL RDS Datenbank
+    NoEcho: true # pw nicht im klartext
+
+Resources:
+  # 1. baue SQS Queue
+  RosterJobQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 910
+
+  # 2. baue Lambdalith (backend)
+  RosterWebFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      # pfad zu handler
+      Handler: org.roster.backend.StreamLambdaHandler::handleRequest
+      Runtime: java21
+      Architectures:
+        - arm64
+      MemorySize: 1024 # ehem. 3008 - erhöht wg. coldstart-timeout
+      Timeout: 29
+      # SnapStart broemm broemm
+      AutoPublishAlias: live
+      SnapStart:
+        ApplyOn: PublishedVersions
+      # fertige fat jar
+      CodeUri: backend/
+      Environment:
+        Variables:
+          # spring muss in web-mode
+          SPRING_PROFILES_ACTIVE: web,dev
+          DB_URL: !Ref DatabaseUrl
+          DB_USERNAME: !Ref DatabaseUsername
+          DB_PASSWORD: !Ref DatabasePassword # wird bei sam deploy mitgegeben
+          DB_DRIVER: "org.postgresql.Driver"
+          SOLVER_QUEUE_URL: !Ref RosterJobQueue # sqs url fuer adapter
+          SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
+          SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: "300000" # 5min
+          SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: "120000" # nach zwei minuten rumhaengen ist feierabend
+      Policies:
+        # lamdalith darf messages in queue schmeißen
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt RosterJobQueue.QueueName
+      Events:
+        # 3. API Gateway bauen
+        RosterApi:
+          Type: Api
+          Properties:
+            Path: /{proxy+} # alle routen an spring weiterleiten
+            Method: ANY
+
+  # Lambda FaaS Worker für solver
+  RosterWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      # gleiche code-basis
+      CodeUri: backend/
+      Handler: org.roster.backend.SqsWorkerHandler::handleRequest
+      Runtime: java21
+      Architectures:
+        - arm64
+      # Solver kriegt CPU/RAM und die max 15 min
+      MemorySize: 1769
+      Timeout: 900
+      AutoPublishAlias: live
+      SnapStart:
+        ApplyOn: PublishedVersions
+      Environment:
+        Variables:
+          # --- aktiviere WORKER Profil ---
+          SPRING_PROFILES_ACTIVE: worker,dev
+          DB_URL: !Ref DatabaseUrl
+          DB_USERNAME: !Ref DatabaseUsername
+          DB_PASSWORD: !Ref DatabasePassword
+          DB_DRIVER: "org.postgresql.Driver"
+          SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
+          SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: "300000" # 5min
+          SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: "120000" # nach zwei minuten rumhaengen ist feierabend
+      Policies:
+        # Erlaubt das Lesen aus der Queue
+        - SQSPollerPolicy:
+            QueueName: !GetAtt RosterJobQueue.QueueName
+        - AWSLambdaVPCAccessExecutionRole
+      Events:
+        # Funktion wird NICHT über HTTP, sondern von Warteschlange aufgeweckt
+        SqsTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt RosterJobQueue.Arn
+            BatchSize: 1 # Immer nur einen Dienstplan auf einmal berechnen
+
+Outputs:
+  # wenn AWS fertig -> fertige URL für das frontend ausspucken!
+  WebEndpoint:
+    Description: "Trage diese URL in deine Vue.js .env Datei ein!"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
